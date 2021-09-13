@@ -21,10 +21,8 @@ connection. Most automatic updates complete within fifteen minutes.
 
 == How {VirtProductName} upgrades affect your cluster
 
-* Upgrading does not interrupt virtual machine workloads.
-** Virtual machine pods are not restarted or migrated during an upgrade. If you
-need to update the `virt-launcher` pod, you must restart or live migrate the
-virtual machine.
+* During {VirtProductName} upgrade, virtual machine workloads are updated by default. VMIs that support live migration (Add a link to limitations section) will be migrated. VMIs that don't support live migration will be evicted. See how to configure workload update methods (Add a link to the new "How to configure workload update methods")
+
 +
 [NOTE]
 ====

@@ -1,0 +1,103 @@
+== How to configure workload update methods
+
+// Erkan's notes: 
+// - I copied this page and edit some parts http://kubevirt.io/user-guide/operations/updating_and_deletion/
+// Add this page under https://docs.openshift.com/container-platform/4.8/virt/upgrading-virt.html as a new page.
+
+Starting with {VirtProductName} 4.9.0, VMI workloads do involve components such as libvirt, qemu, and virt-launcher are updated during {VirtProductName} upgrades.
+
+`workloadUpdateStrategy` field on the HyperConverged CR is for configuring strategies used by virt-operator when updating the VMI workload pods.
+
+There are two methods supported.
+
+1) LiveMigrate: Which results in VMIs being updated by live migrating the virtual machine guest into a new pod with all the updated components enabled.
+
+2) Evict: Which results in the VMI's pod being shutdown. If the VMI is controlled by a higher level VirtualMachine object with runStrategy: always, then a new VMI will spin up in a new pod with updated components.
+
+The least disruptive way to update VMI workloads is to use LiveMigrate. Any VMI workload that is not live migratable (Add a link to limitations section) will be left untouched. If live migration is not enabled in the cluster, then the only option available for virt-operator managed VMI updates is the Evict method.
+
+
+- Example: Enabling VMI workload updates via LiveMigration
+
+    ```
+    apiVersion: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    metadata:
+      name: kubevirt-hyperconverged
+    spec:
+      workloadUpdateStrategy:
+        batchEvictionInterval: 1m0s
+        batchEvictionSize: 10
+        workloadUpdateMethods:
+        - LiveMigrate
+    ```
+
+- Example: Enabling VMI workload updates via Evict with batch tunings
+
+    The batch tunings allow configuring how quickly VMI's are evicted. In large clusters, it's desirable to ensure that VMI's are evicted in batches in order to distribute load.
+
+    ```
+    ---
+    apiVersion: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    metadata:
+      name: kubevirt-hyperconverged
+    spec:
+      workloadUpdateStrategy:
+        batchEvictionInterval: 1m0s
+        batchEvictionSize: 10
+        workloadUpdateMethods:
+        - Evict
+    ```
+
+- Example: Enabling VMI workload updates with both LiveMigrate and Evict
+
+When both LiveMigrate and Evict are specified, then any workloads which are live migratable will be guaranteed to be live migrated. Only workloads which are not live migratable will be evicted.
+
+    ```
+    apiVersion: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    metadata:
+      name: kubevirt-hyperconverged
+    spec:
+      workloadUpdateStrategy:
+        batchEvictionInterval: 1m0s
+        batchEvictionSize: 10
+        workloadUpdateMethods:
+        - LiveMigrate
+        - Evict
+
+    ```
+
+
+- Example: Disabling VMI workload updates
+
+    ```
+    apiVersion: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    metadata:
+      name: kubevirt-hyperconverged
+    spec:
+      workloadUpdateStrategy:
+        batchEvictionInterval: 1m0s
+        batchEvictionSize: 10
+        workloadUpdateMethods: []
+    ```
+
+    > Note: It is not possible to disable workload updates by setting `workloadUpdateMethods` as empty array before upgrading {VirtProductName} from 4.8.x to 4.9.y. As a workaround, follow the steps below.
+    
+    - Before upgrade, put the jsonpatch annotation on HCO as below
+    ```
+    oc -n openshift-cnv annotate hco kubevirt-hyperconverged --overwrite \
+         kubevirt.kubevirt.io/jsonpatch='[{"op": "replace", "path": "/spec/workloadUpdateStrategy/workloadUpdateMethods", "value": []}]'
+    ``` 
+    
+    - After upgrade, set `workloadUpdateMethods` empty array
+    ```
+    oc -n openshift-cnv patch hco kubevirt-hyperconverged --type='json' -p='[{"op": "replace", "path": "/spec/workloadUpdateStrategy/workloadUpdateMethods", "value":[]}]'
+    ```
+    
+    - After setting `workloadUpdateMethods empty array, delete the jsonpatch annotation
+    ```
+    oc -n kubevirt-hyperconverged annotate hco kubevirt-hyperconverged kubevirt.kubevirt.io/jsonpatch-
+    ```
